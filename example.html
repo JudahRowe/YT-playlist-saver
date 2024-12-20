@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+
+    <button onclick="authenticate().then(loadClient)">authorize and load</button>
+    <button onclick="execute()">execute</button>
+    <button onClick="compare()">compare</button>
+
+    <title>Page Title</title>
+</head>
+<body>
+
+    <h1>This is a Heading</h1>
+    <p>This is a paragraph.</p>
+    <input type="text" id="inputPlaylist" name="inputPlaylist"></input>
+    <input type="file" id="oldPlaylist" name="oldPlaylist" accept=".csv" />
+    <input type="file" id="newPlaylist" name="newPlaylist" accept=".csv" />
+    <pre id="output"></pre>
+
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://unpkg.com/read-excel-file@5.x/bundle/read-excel-file.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script>
+
+    /**
+     * Sample JavaScript code for youtube.playlistItems.list
+     * See instructions for running APIs Explorer code samples locally:
+     * https://developers.google.com/explorer-help/code-samples#javascript
+     */
+
+     function exportToCsv(filename, rows) {
+        var processRow = function (row) {
+            var finalVal = '';
+            for (var j = 0; j < row.length; j++) {
+                var innerValue = row[j] === null || row[j] === undefined ? 'Unknown' : row[j].toString();
+                if (row[j] instanceof Date) {
+                    innerValue = row[j].toLocaleString();
+                };
+                var result = innerValue.replace(/"/g, '""');
+                if (result.search(/("|,|\n)/g) >= 0)
+                    result = '"' + result + '"';
+                if (j > 0)
+                    finalVal += ',';
+                finalVal += result;
+            }
+            return finalVal + '\n';
+        };
+
+        var csvFile = '';
+        for (var i = 0; i < rows.length; i++) {
+            csvFile += processRow(rows[i]);
+        }
+
+        var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
+        if (navigator.msSaveBlob) { // IE 10+
+            navigator.msSaveBlob(blob, filename);
+        } else {
+            var link = document.createElement("a");
+            if (link.download !== undefined) { // feature detection
+                // Browsers that support HTML5 download attribute
+                var url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    }
+
+    // Make sure the client is loaded and sign-in is complete before calling this method.
+    // function execute() {
+    //     let videoArray = [];
+    //     let call = gapi.client.youtube.playlistItems.list({
+    //     "part": [
+    //         "snippet,contentDetails"
+    //     ],
+    //     "maxResults": 50,
+    //     "playlistId": "PLimseXH8UHtAeYuii7OdfclD2K_Lwh50N"
+    //     })
+    //         .then(function(response) {
+    //                 // Handle the results here (response.result has the parsed body).
+    //                 let result = response.result;
+    //                 console.log("Response", response);
+                    
+    //                 result.items.forEach(video => {
+    //                     let snippet = video?.snippet;
+    //                     let videoInfo = [snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+    //                     videoArray.push(videoInfo);
+    //                 });
+                       
+    //                 let nextPageToken = result?.nextPageToken; 
+    //                 let pageInfo = result?.pageInfo;
+    //                 let extraIterations = Math.ceil((pageInfo?.totalResults - pageInfo?.resultsPerPage) / pageInfo?.resultsPerPage);
+    //                console.log(extraIterations) 
+    //                 for (i=0; i < extraIterations; ++i) {
+    //                     gapi.client.youtube.playlistItems.list({
+    //                         "part": [
+    //                             "snippet,contentDetails"
+    //                         ],
+    //                         "maxResults": 50,
+    //                         "playlistId": "PLimseXH8UHtAeYuii7OdfclD2K_Lwh50N",
+    //                         "pageToken": nextPageToken,
+    //                         })
+    //                             .then(function(response1) {
+    //                                console.log("response " + i,response1) 
+    //                                 nextPageToken = response1.result?.nextPageToken;
+    //                                 response1.result.items.forEach(video => {
+    //                                 let snippet = video?.snippet;
+    //                                 let videoInfo = [snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+    //                                 videoArray.push(videoInfo);
+    //                                 });
+    //                             },
+    //                             function(err) {console.error("Execute error", err); });
+    //                 }
+                    
+    //             },
+    //             function(err) { console.error("Execute error", err); });
+    //     console.log("Video Array", videoArray);  
+    //     exportToCsv("playlists", videoArray);
+    //    // return call
+    // }
+    async function execute() {
+        gapi.client.setApiKey("API_KEY_HERE");
+       // gapi.client.init({'clientId': '101696912938-7tnititsp6nnr7oa9c9vrghvvpkqobs7.apps.googleusercontent.com'});
+        let promise1 = Promise.resolve(gapi.client.load("https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest"));
+            promise1.then(function() { console.log("GAPI client loaded for API"); },
+                function(err) { console.error("Error loading GAPI client for API", err); });
+        
+        let wait = await promise1;
+
+
+        // https://www.youtube.com/playlist?list=PLimseXH8UHtDMQ66ek8b3QB-0_W60vahd
+        // https://www.youtube.com/playlist?list=PLimseXH8UHtDMQ66ek8b3QB-0_W60vahd
+        // https://youtube.com/playlist?list=PLimseXH8UHtDMQ66ek8b3QB-0_W60vahd&si=js1jiIVO6E30V5b8
+
+        let inputPlaylist = document.getElementById("inputPlaylist").value;
+        const regex = new RegExp("list=");
+        console.log(inputPlaylist);
+        console.log(regex.source)
+        console.log(regex.test(inputPlaylist));
+        console.log(inputPlaylist.match(regex.source));
+        if (regex.test(inputPlaylist)) {
+            console.log("in loop");
+            inputPlaylist = inputPlaylist.split(regex.source)[1];
+        }
+        inputPlaylist = inputPlaylist.split("&")[0];
+        console.log(inputPlaylist);
+
+        let videoArray = [["position", "videoOwnerChannelTitle", "title", "videoId"]]; 
+        let myPromise = Promise.resolve(gapi.client.youtube.playlistItems.list({
+        "part": [
+            "snippet,contentDetails"
+        ],
+        "maxResults": 50,
+        "playlistId": inputPlaylist,
+        }));
+        myPromise.then(async function(response) {
+            // Handle the results here (response.result has the parsed body).
+            let result = response.result;
+                    console.log("Response", response);
+                    
+                    result.items.forEach(video => {
+                        let snippet = video?.snippet;
+                        let videoInfo = [snippet?.position, snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+                        videoArray.push(videoInfo);
+                    });
+                       
+                    let nextPageToken = result?.nextPageToken; 
+                    let pageInfo = result?.pageInfo;
+                    let extraIterations = Math.ceil((pageInfo?.totalResults - pageInfo?.resultsPerPage) / pageInfo?.resultsPerPage);
+                   console.log(extraIterations) 
+                    for (i=0; i < extraIterations; ++i) {
+                        var myPromise1 = gapi.client.youtube.playlistItems.list({
+                            "part": [
+                                "snippet,contentDetails"
+                            ],
+                            "maxResults": 50,
+                            "playlistId": inputPlaylist,
+                            "pageToken": nextPageToken,
+                            });
+
+                            myPromise1.then(function(response1) {
+                                   console.log("response " + i,response1) 
+                                    nextPageToken = response1.result?.nextPageToken;
+                                    response1.result.items.forEach(video => {
+                                    let snippet = video?.snippet;
+                                    let videoInfo = [snippet?.position, snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+                                    videoArray.push(videoInfo);
+                                    });
+                                },
+                                function(err) {console.error("Execute error", err); });
+                        
+                        let value1 = await myPromise1
+                    }
+
+                    let myPromise3 = Promise.resolve(gapi.client.youtube.playlists.list({
+                        "part": [
+                            "snippet"
+                        ],
+                        "id": inputPlaylist,
+                        }));
+                    myPromise3.then(function(response2) {
+                        console.log("successful");
+                    },
+                    function(err) {console.error("Execute error", err); });
+
+                    value1 = await myPromise1;
+                    value2 = await myPromise3;
+                    console.log(value2);
+                    console.log("video array:", videoArray);
+
+                    const today = new Date();
+                    let date = "_" + today.getFullYear() + "-" + today.getMonth() + "-" + today.getDate();
+                    let title = value2.result.items[0].snippet.title
+
+                    exportToCsv(title + date, videoArray);
+                    
+                },
+                function(err) { console.error("Execute error", err); });
+        // let value = await myPromise1;
+        // console.log("value:", value);
+        
+        // console.log("length:", videoArray.length);
+        // let call = gapi.client.youtube.playlistItems.list({
+        // "part": [
+        //     "snippet,contentDetails"
+        // ],
+        // "maxResults": 50,
+        // "playlistId": "PLimseXH8UHtAeYuii7OdfclD2K_Lwh50N"
+        // })
+        //     .then(function(response) {
+        //             // Handle the results here (response.result has the parsed body).
+        //             let result = response.result;
+        //             console.log("Response", response);
+                    
+        //             result.items.forEach(video => {
+        //                 let snippet = video?.snippet;
+        //                 let videoInfo = [snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+        //                 videoArray.push(videoInfo);
+        //             });
+                       
+        //             let nextPageToken = result?.nextPageToken; 
+        //             let pageInfo = result?.pageInfo;
+        //             let extraIterations = Math.ceil((pageInfo?.totalResults - pageInfo?.resultsPerPage) / pageInfo?.resultsPerPage);
+        //            console.log(extraIterations) 
+        //             for (i=0; i < extraIterations; ++i) {
+        //                 gapi.client.youtube.playlistItems.list({
+        //                     "part": [
+        //                         "snippet,contentDetails"
+        //                     ],
+        //                     "maxResults": 50,
+        //                     "playlistId": "PLimseXH8UHtAeYuii7OdfclD2K_Lwh50N",
+        //                     "pageToken": nextPageToken,
+        //                     })
+        //                         .then(function(response1) {
+        //                            console.log("response " + i,response1) 
+        //                             nextPageToken = response1.result?.nextPageToken;
+        //                             response1.result.items.forEach(video => {
+        //                             let snippet = video?.snippet;
+        //                             let videoInfo = [snippet?.videoOwnerChannelTitle, snippet?.title, video?.contentDetails?.videoId];
+        //                             videoArray.push(videoInfo);
+        //                             });
+        //                         },
+        //                         function(err) {console.error("Execute error", err); });
+        //             }
+                    
+        //         },
+        //         function(err) { console.error("Execute error", err); });
+        // console.log("Video Array", videoArray);  
+        // exportToCsv("playlists", videoArray);
+       // return call
+    }
+    const playlist1 = document.getElementById('oldPlaylist');
+    let playlist1File;
+    playlist1.addEventListener('change', function(event) {
+        playlist1File = event.target.files[0];
+    });
+    const playlist2 = document.getElementById('newPlaylist');
+    let playlist2File;
+    playlist2.addEventListener('change', function(event) {
+        playlist2File = event.target.files[0];
+    });
+    async function compare() {
+        let data1;
+        let data2;
+        if (playlist1File) {
+                const reader = new FileReader();
+                let myPromise = new Promise((resolve, reject) => {
+                    reader.onerror = async () => {
+                        reader.abort();
+                    };
+                    reader.onload = async (e) => {
+                        const content = e.target.result;
+                        document.getElementById("output").innerText = content;
+                        const jsonData = Papa.parse(content, {header: true}).data;
+                        console.log(jsonData);
+                        resolve(jsonData);
+                        return jsonData
+                    };
+                    reader.readAsText(playlist1File);
+
+                });
+                // reader.onload = function(e) {
+                //     const content = e.target.result;
+                //     document.getElementById("output").innerText = content;
+                //     const jsonData = Papa.parse(content, {header: true}).data;
+                //     console.log(jsonData);
+                // };
+                myPromise.then(function () {console.log("here")},
+                function(err) {console.error("error")}
+                )
+                data1 = await myPromise;
+            }
+        if (playlist2File) {
+                const reader = new FileReader();
+                let myPromise = new Promise((resolve, reject) => {
+                    reader.onerror = async () => {
+                        reader.abort();
+                    };
+                    reader.onload = async (e) => {
+                        const content = e.target.result;
+                        document.getElementById("output").innerText = content;
+                        const jsonData = Papa.parse(content, {header: true}).data;
+                        console.log(jsonData);
+                        resolve(jsonData);
+                        return jsonData
+                    };
+                    reader.readAsText(playlist2File);
+
+                });
+                // reader.onload = function(e) {
+                //     const content = e.target.result;
+                //     document.getElementById("output").innerText = content;
+                //     const jsonData = Papa.parse(content, {header: true}).data;
+                //     console.log(jsonData);
+                // };
+                myPromise.then(function () {console.log("here")},
+                function(err) {console.error("error")}
+                )
+                data2 = await myPromise;
+            }
+            console.log(data1);
+            console.log(data2);
+
+            if (data1 && data2) {
+                data1.pop();
+                data2.pop();
+                data1 = data1.sort((a, b) => {
+                  //  console.log(typeof(a.videoId));
+                    return a.videoId.localeCompare(b.videoId);
+                } );
+                data2 = data2.sort((a, b) => {
+                    console.log(typeof(a.videoId))
+                    return a.videoId.localeCompare(b.videoId);
+                } );
+
+
+                let idx1 = 0;
+                let idx2 = 0;
+                let changed = [];
+                let only1 = [];
+                let only2 = [];
+
+                while (idx1 < data1.length || idx2 < data2.length) {
+                    if (idx1 < data1.length) {
+                        if (idx2 < data2.length) {
+                            let cmp = data1[idx1].videoId.localeCompare(data2[idx2].videoId)
+                            if (cmp == 0) {
+                                if (data1[idx1].title.localeCompare(data2[idx2].title) != 0) {
+                                    changed.push({
+                                        "vid1" : data1[idx1],
+                                        "vid2" : data2[idx2],
+                                    });
+                                    
+                                }
+                                ++idx1;
+                                ++idx2;
+                            }
+                            else if (cmp < 0) {
+                                only1.push(data1[idx1]);
+                                ++idx1;
+                            }
+                            else if (cmp > 0) {
+                                only2.push(data2[idx2]);
+                                ++idx2;
+                            }
+                        }
+                        else if (idx2 >= data2.length) {
+                            only1.push(data1[idx1]);
+                            ++idx1;
+                        }
+                    }
+                    else if (idx1 >= data1.length) {
+                        only2.push(data2[idx2]);
+                        ++idx2;
+                        // fix if file name has dot in the title
+                    }
+                }
+                console.log(changed);
+                console.log(only1);
+                console.log(only2);
+               // console.log(data1);
+               // console.log(data2);
+            }
+        // const input = document.getElementById('oldPlaylist');
+        // input.addEventListener('change', function(event) {
+        //     const file = event.target.files[0];
+        //     console.log(file);
+        //     if (file) {
+        //         const reader = new FileReader();
+        //         reader.onload = function(e) {
+        //             const content = e.target.result;
+        //             document.getElementById("output").innerText = content;
+        //             console.log(content);
+        //         };
+        //         reader.readAsText(file);
+        //     }
+        // })
+        
+    }
+    gapi.load("client:auth2", function() {
+        gapi.auth2.init({client_id: "101696912938-7tnititsp6nnr7oa9c9vrghvvpkqobs7.apps.googleusercontent.com"});
+    });
+
+    
+    </script>
+
+</body>
+</html>
